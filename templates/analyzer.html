@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analizador sintactico - Proyecto final</title>
+<style>
+:root {
+  --bg: #f4f6fb;
+  --panel: #ffffff;
+  --ink: #16202e;
+  --muted: #65748a;
+  --line: #dde3ed;
+  --brand: #2f5bd8;
+  --brand-soft: #e7edfd;
+  --ok: #157f4d;
+  --ok-soft: #e2f5eb;
+  --bad: #b3261e;
+  --bad-soft: #fdeceb;
+  --warn: #9a6400;
+  --warn-soft: #fdf3dd;
+  --mono: "Cascadia Mono", "Consolas", "SF Mono", "Menlo", monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.55 "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+header {
+  background: linear-gradient(135deg, #1d2b4d, #2f5bd8);
+  color: #fff;
+  padding: 26px 32px 22px;
+}
+header h1 { margin: 0; font-size: 22px; letter-spacing: .2px; }
+header p { margin: 6px 0 0; opacity: .85; font-size: 14px; }
+
+nav {
+  display: flex;
+  gap: 4px;
+  padding: 0 32px;
+  background: #22325a;
+}
+nav button {
+  background: none;
+  border: 0;
+  color: #c3cde6;
+  padding: 12px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+}
+nav button:hover { color: #fff; }
+nav button.active { color: #fff; border-bottom-color: #7fa6ff; }
+
+main { padding: 24px 32px 60px; max-width: 1280px; }
+section.tab { display: none; }
+section.tab.active { display: block; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px 20px;
+  margin-bottom: 18px;
+}
+.card > h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--muted);
+}
+.card > h2 + p.hint { margin-top: 0; }
+
+p.hint { color: var(--muted); font-size: 13px; margin: 4px 0 12px; }
+
+.row { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+.row > * { flex: 1 1 340px; min-width: 0; }
+
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 13.5px;
+  line-height: 1.6;
+  resize: vertical;
+  background: #fbfcfe;
+  color: var(--ink);
+}
+textarea:focus { outline: 2px solid var(--brand-soft); border-color: var(--brand); }
+
+.controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+
+button.go {
+  background: var(--brand);
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+button.go:hover { background: #2449ae; }
+button.go:disabled { opacity: .55; cursor: progress; }
+
+button.ghost {
+  background: #fff;
+  color: var(--brand);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 13px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+button.ghost:hover { border-color: var(--brand); background: var(--brand-soft); }
+
+label.choice { font-size: 13.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+select { border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; font-size: 13.5px; background: #fff; color: var(--ink); }
+
+.verdict {
+  border-radius: 9px;
+  padding: 13px 16px;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  border: 1px solid transparent;
+}
+.verdict.both, .verdict.ll1, .verdict.slr1 { background: var(--ok-soft); color: var(--ok); border-color: #b7e3cd; }
+.verdict.neither { background: var(--bad-soft); color: var(--bad); border-color: #f3c6c3; }
+.verdict small { display: block; font-weight: 400; font-family: inherit; opacity: .8; margin-top: 3px; }
+
+.err {
+  background: var(--bad-soft);
+  color: var(--bad);
+  border: 1px solid #f3c6c3;
+  border-radius: 9px;
+  padding: 12px 15px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+th { background: #f0f3f9; font-weight: 600; color: var(--muted); font-size: 12.5px; text-transform: uppercase; letter-spacing: .4px; }
+td.mono, th.mono, table.grid td, table.grid th { font-family: var(--mono); }
+/* En las tablas de simbolos los encabezados son terminales y no terminales:
+   pasarlos a mayusculas borraria justo la diferencia entre unos y otros. */
+table.grid th { text-transform: none; font-size: 13px; }
+table.grid td { text-align: center; }
+table.grid th:first-child, table.grid td:first-child { background: #f0f3f9; font-weight: 600; text-align: center; }
+/* Separa ACTION de GOTO, como la barra vertical de la Figura 4.37. */
+table.grid .sep { border-left: 2px solid var(--brand); }
+td.conflict { background: var(--bad-soft); color: var(--bad); font-weight: 600; }
+td.empty { background: #fafbfd; }
+.scroll { overflow-x: auto; }
+
+.badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 2px 11px;
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: var(--mono);
+}
+.badge.yes { background: var(--ok-soft); color: var(--ok); }
+.badge.no { background: var(--bad-soft); color: var(--bad); }
+.badge.info { background: var(--brand-soft); color: var(--brand); }
+
+ul.plain { margin: 8px 0 0; padding-left: 20px; font-size: 13.5px; color: var(--muted); }
+ul.plain li { margin-bottom: 3px; }
+
+.states { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 12px; }
+.state {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 10px 12px;
+  background: #fbfcfe;
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.state h3 { margin: 0 0 6px; font-size: 13px; color: var(--brand); }
+.state .item { white-space: nowrap; }
+.state .goto { color: var(--muted); margin-top: 5px; border-top: 1px dashed var(--line); padding-top: 5px; }
+
+details { border: 1px solid var(--line); border-radius: 8px; margin-top: 10px; background: #fbfcfe; }
+details > summary { cursor: pointer; padding: 8px 12px; font-size: 13.5px; font-weight: 600; color: var(--muted); }
+details[open] > summary { border-bottom: 1px solid var(--line); }
+details .inner { padding: 12px; }
+
+.result {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  background: var(--panel);
+}
+.result > header {
+  background: none;
+  color: var(--ink);
+  padding: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.result > header code { font-family: var(--mono); font-size: 15px; font-weight: 700; }
+
+pre.out {
+  background: #1d2b4d;
+  color: #dbe4fb;
+  border-radius: 8px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 10px 0 0;
+}
+
+.svgbox { overflow-x: auto; border: 1px solid var(--line); border-radius: 9px; background: #fbfcfe; padding: 10px; margin-top: 10px; }
+svg text { font-family: var(--mono); }
+
+.order { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 5px; margin-top: 8px; }
+.order div { font-family: var(--mono); font-size: 12.5px; background: #fbfcfe; border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; }
+.order div span { color: var(--muted); margin-right: 6px; }
+
+.main-value {
+  margin-top: 12px;
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 700;
+  background: var(--brand-soft);
+  color: var(--brand);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: inline-block;
+}
+
+.muted { color: var(--muted); font-size: 13px; }
+.empty-note { color: var(--muted); font-size: 13.5px; font-style: italic; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Analizador sintactico &mdash; Proyecto final de Lenguajes Formales</h1>
+  <p>FIRST y FOLLOW, parser LL(1) dirigido por tabla, parser SLR(1) y evaluacion de una SDD por grafo de dependencias.</p>
+</header>
+
+<nav>
+  <button data-tab="grammar" class="active">1. Gramatica</button>
+  <button data-tab="strings">2. Cadenas</button>
+  <button data-tab="sdd">3. SDD</button>
+</nav>
+
+<main>
+
+<!-- ============================ ITEMS 1 Y 2 ============================ -->
+<section class="tab active" id="tab-grammar">
+  <div class="card">
+    <h2>Gramatica</h2>
+    <p class="hint">Un no terminal por linea, con sus alternativas separadas por espacios. La cadena vacia se escribe <code>e</code>. La primera linea con el numero de no terminales es opcional aqui.</p>
+    <textarea id="grammar" rows="7" spellcheck="false"></textarea>
+    <div class="controls">
+      <button class="go" id="analyze">Analizar gramatica</button>
+      <span class="muted">Ejemplos:</span>
+      <button class="ghost" data-example="1">Ejemplo 1</button>
+      <button class="ghost" data-example="2">Ejemplo 2</button>
+      <button class="ghost" data-example="3">Ejemplo 3</button>
+      <button class="ghost" data-example="blocks">Bloques anidados</button>
+      <button class="ghost" data-example="onlyll1">Solo LL(1)</button>
+    </div>
+  </div>
+
+  <div id="grammar-out"></div>
+</section>
+
+<!-- ============================== CADENAS ============================== -->
+<section class="tab" id="tab-strings">
+  <div class="card">
+    <h2>Cadenas a analizar</h2>
+    <p class="hint">Una cadena por linea. La cadena vacia se escribe <code>e</code>. El marcador <code>$</code> lo agrega el programa. Se usa la gramatica de la pestana anterior.</p>
+    <div class="row">
+      <div>
+        <textarea id="strings" rows="6" spellcheck="false"></textarea>
+      </div>
+      <div style="flex: 0 1 260px;">
+        <label class="choice" for="parser">Parser</label>
+        <select id="parser" style="width:100%; margin-top:6px;">
+          <option value="auto">Automatico</option>
+          <option value="ll1">T: LL(1)</option>
+          <option value="slr1">B: SLR(1)</option>
+        </select>
+        <div class="controls">
+          <button class="go" id="run">Analizar cadenas</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="strings-out"></div>
+</section>
+
+<!-- ================================ SDD ================================ -->
+<section class="tab" id="tab-sdd">
+  <div class="card">
+    <h2>Item 3: definicion dirigida por la sintaxis</h2>
+    <p class="hint">La gramatica es la del Item 3 y la trae el servidor, porque las reglas semanticas estan escritas para ella. Un numeral, luego <code>#</code>, luego la base: <code>b</code> es base 2 y <code>t</code> es base 3.</p>
+    <pre class="out" id="sdd-grammar">cargando...</pre>
+    <div class="row" style="margin-top:14px;">
+      <div>
+        <textarea id="sdd-strings" rows="6" spellcheck="false"></textarea>
+      </div>
+      <div style="flex: 0 1 300px;">
+        <label class="choice"><input type="checkbox" id="circular"> Usar la SDD circular</label>
+        <p class="hint" style="margin-top:6px;">Cambia una regla de <code>R -&gt; DR</code> para que el grafo tenga un ciclo (Paso 6 del enunciado).</p>
+        <div class="controls">
+          <button class="go" id="evaluate">Evaluar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="sdd-def"></div>
+  <div id="sdd-out"></div>
+</section>
+
+</main>
+
+<script>
+"use strict";
+
+const EXAMPLES = {
+  "1": "3\nS -> S+T T\nT -> T*F F\nF -> (S) i",
+  "2": "3\nS -> AB\nA -> aA d\nB -> bBc e",
+  "3": "1\nS -> SS a",
+  "blocks": "3\nS -> " + "{L}" + "\nL -> IL e\nI -> " + "{L}" + " i",
+  "onlyll1": "3\nS -> AaAb BbBa\nA -> e\nB -> e"
+};
+
+const EXAMPLE_STRINGS = {
+  "1": "i+i\n(i)\n(i+i)*i)",
+  "2": "d\nadbc\na",
+  "3": "a\naa",
+  "blocks": "{i}\n{i{i}}\n{i",
+  "onlyll1": "ab\nba\naa"
+};
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ------------------------------ pestanas ------------------------------ */
+document.querySelectorAll("nav button").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll("nav button").forEach((b) => b.classList.remove("active"));
+    document.querySelectorAll("section.tab").forEach((s) => s.classList.remove("active"));
+    button.classList.add("active");
+    $("tab-" + button.dataset.tab).classList.add("active");
+  });
+});
+
+document.querySelectorAll("button[data-example]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const key = button.dataset.example;
+    $("grammar").value = EXAMPLES[key];
+    $("strings").value = EXAMPLE_STRINGS[key];
+    $("grammar-out").innerHTML = "";
+    $("strings-out").innerHTML = "";
+  });
+});
+
+/* ------------------------------ peticiones ----------------------------- */
+async function send(url, body, method) {
+  const options = { method: method || "POST", headers: { "Content-Type": "application/json" } };
+  if (options.method === "POST") options.body = JSON.stringify(body);
+
+  const response = await fetch(url, options);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || ("Error " + response.status));
+  return data;
+}
+
+function showError(target, message) {
+  $(target).innerHTML = '<div class="err"><strong>Error.</strong> ' + esc(message) + "</div>";
+}
+
+async function run(buttonId, target, task) {
+  const button = $(buttonId);
+  button.disabled = true;
+  try {
+    await task();
+  } catch (error) {
+    showError(target, error.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+/* --------------------------- Items 1 y 2: vista ------------------------ */
+function renderGrammar(data) {
+  const parts = [];
+
+  const verdict = data.verdict;
+  const note = {
+    both: "Es LL(1) y SLR(1): los dos parsers sirven.",
+    ll1: "Es LL(1) pero no SLR(1).",
+    slr1: "Es SLR(1) pero no LL(1).",
+    neither: "No se puede analizar con ninguno de los dos parsers."
+  }[verdict.code];
+  parts.push('<div class="verdict ' + verdict.code + '">' + esc(verdict.message) +
+             "<small>" + esc(note) + "</small></div>");
+
+  // Producciones numeradas.
+  parts.push('<div class="card"><h2>Producciones</h2><div class="scroll"><table><tr>' +
+    "<th>#</th><th>Produccion</th></tr>" +
+    data.grammar.productions.map((p) =>
+      "<tr><td class='mono'>" + p.index + "</td><td class='mono'>" + esc(p.text) + "</td></tr>"
+    ).join("") +
+    "</table></div>" +
+    '<p class="hint">Simbolo inicial <code>' + esc(data.grammar.start) + "</code> &middot; no terminales <code>" +
+    esc(data.grammar.nonterminals.join(" ")) + "</code> &middot; terminales <code>" +
+    esc(data.grammar.terminals.join(" ")) + "</code></p></div>");
+
+  // FIRST y FOLLOW.
+  parts.push('<div class="card"><h2>Item 1: FIRST y FOLLOW</h2>' +
+    '<p class="hint">Seccion 4.4.2 del libro. Es la misma salida del argumento <code>--sets</code>.</p>' +
+    '<div class="scroll"><table><tr><th>No terminal</th><th>FIRST</th><th>FOLLOW</th></tr>' +
+    data.sets.rows.map((row) =>
+      "<tr><td class='mono'>" + esc(row.nonterminal) + "</td><td class='mono'>" +
+      esc(row.first) + "</td><td class='mono'>" + esc(row.follow) + "</td></tr>"
+    ).join("") +
+    "</table></div>" +
+    "<details><summary>Salida literal de <code>--sets</code></summary><div class='inner'>" +
+    '<pre class="out">' + esc(data.sets.lines.join("\n")) + "</pre></div></details></div>");
+
+  // Tabla LL(1).
+  const ll1 = data.ll1;
+  parts.push('<div class="card"><h2>Item 2: tabla LL(1)</h2>' +
+    '<p class="hint">Algoritmo 4.31. Una celda con dos producciones es un conflicto.</p>' +
+    (ll1.isLL1
+      ? '<p><span class="badge yes">la gramatica es LL(1)</span></p>'
+      : '<p><span class="badge no">la gramatica no es LL(1)</span></p>') +
+    '<div class="scroll"><table class="grid"><tr><th></th>' +
+    ll1.columns.map((c) => "<th>" + esc(c) + "</th>").join("") + "</tr>" +
+    ll1.rows.map((row) =>
+      "<tr><td>" + esc(row.nonterminal) + "</td>" +
+      row.cells.map((cell) =>
+        cell.productions.length === 0
+          ? "<td class='empty'></td>"
+          : "<td class='" + (cell.conflict ? "conflict" : "") + "'>" +
+            cell.productions.map(esc).join("<br>") + "</td>"
+      ).join("") + "</tr>"
+    ).join("") +
+    "</table></div>" +
+    (ll1.reasons.length
+      ? "<ul class='plain'>" + ll1.reasons.map((r) => "<li>" + esc(r) + "</li>").join("") + "</ul>"
+      : "") +
+    "</div>");
+
+  // Automata LR(0) y tablas SLR.
+  const slr = data.slr1;
+  parts.push('<div class="card"><h2>Item 2: automata LR(0)</h2>' +
+    '<p class="hint">Seccion 4.6.2, sobre la gramatica aumentada con <code>' +
+    esc(slr.productions[0].text) + "</code>. " + slr.states.length + " estados.</p>" +
+    '<div class="states">' +
+    slr.states.map((state) =>
+      '<div class="state"><h3>I' + state.index + "</h3>" +
+      state.items.map((item) => "<div class='item'>" + esc(item) + "</div>").join("") +
+      (state.transitions.length
+        ? "<div class='goto'>" + state.transitions.map((t) =>
+            esc(t.symbol) + " &rarr; I" + t.target).join("<br>") + "</div>"
+        : "") +
+      "</div>"
+    ).join("") +
+    "</div></div>");
+
+  parts.push('<div class="card"><h2>Item 2: tablas ACTION y GOTO</h2>' +
+    '<p class="hint">Algoritmo 4.46. <code>sN</code> desplaza al estado N, <code>rN</code> reduce por la produccion N y <code>acc</code> acepta.</p>' +
+    (slr.isSLR1
+      ? '<p><span class="badge yes">la gramatica es SLR(1)</span></p>'
+      : '<p><span class="badge no">la gramatica no es SLR(1)</span></p>') +
+    '<div class="scroll"><table class="grid"><tr><th>Estado</th>' +
+    slr.terminals.map((t) => "<th>" + esc(t) + "</th>").join("") +
+    slr.nonterminals.map((n, i) => "<th class='" + (i === 0 ? "sep" : "") + "'>" +
+      esc(n) + "</th>").join("") + "</tr>" +
+    slr.rows.map((row) =>
+      "<tr><td>" + row.state + "</td>" +
+      slr.terminals.map((t) => {
+        const action = row.actions[t];
+        return action
+          ? "<td title='" + esc(action.detail) + "'>" + esc(action.text) + "</td>"
+          : "<td class='empty'></td>";
+      }).join("") +
+      slr.nonterminals.map((n, i) => {
+        const sep = i === 0 ? "sep " : "";
+        return row.goto[n] === undefined
+          ? "<td class='" + sep + "empty'></td>"
+          : "<td class='" + sep + "'>" + row.goto[n] + "</td>";
+      }).join("") + "</tr>"
+    ).join("") +
+    "</table></div>" +
+    (slr.conflicts.length
+      ? "<ul class='plain'>" + slr.conflicts.map((c) => "<li>" + esc(c) + "</li>").join("") + "</ul>"
+      : "") +
+    "<details><summary>Producciones numeradas</summary><div class='inner'><pre class='out'>" +
+    esc(slr.productions.map((p) => p.index + ". " + p.text).join("\n")) +
+    "</pre></div></details></div>");
+
+  $("grammar-out").innerHTML = parts.join("");
+}
+
+/* ----------------------------- arbol en SVG ---------------------------- */
+function treeSVG(tree, showAttrs) {
+  const colW = showAttrs ? 110 : 62;
+  const rowH = showAttrs ? 86 : 62;
+  const nodes = [];
+  const links = [];
+
+  (function place(node, parent) {
+    const self = {
+      symbol: node.symbol,
+      epsilon: node.epsilon,
+      attrs: node.attrs,
+      px: node.x * colW + colW / 2,
+      py: node.depth * rowH + 24
+    };
+    nodes.push(self);
+    if (parent) links.push([parent, self]);
+    (node.children || []).forEach((child) => place(child, self));
+  })(tree, null);
+
+  const width = Math.max(tree.width * colW, 220);
+  const height = tree.height * rowH + (showAttrs ? 54 : 28);
+
+  const edges = links.map(([a, b]) =>
+    '<line x1="' + a.px + '" y1="' + (a.py + 9) + '" x2="' + b.px + '" y2="' + (b.py - 13) +
+    '" stroke="#b6c0d4" stroke-width="1.4"/>'
+  ).join("");
+
+  const boxes = nodes.map((node) => {
+    const isTerminal = !/^[A-Z]$/.test(node.symbol);
+    const fill = node.epsilon ? "#f0f3f9" : (isTerminal ? "#e2f5eb" : "#e7edfd");
+    const stroke = node.epsilon ? "#b6c0d4" : (isTerminal ? "#8fd3b2" : "#9db7f2");
+    const ink = node.epsilon ? "#65748a" : (isTerminal ? "#157f4d" : "#2f5bd8");
+    const w = Math.max(24, node.symbol.length * 9 + 14);
+
+    let out =
+      '<rect x="' + (node.px - w / 2) + '" y="' + (node.py - 13) + '" width="' + w +
+      '" height="24" rx="6" fill="' + fill + '" stroke="' + stroke + '"/>' +
+      '<text x="' + node.px + '" y="' + (node.py + 4) + '" text-anchor="middle" font-size="13" font-weight="600" fill="' +
+      ink + '">' + esc(node.symbol) + "</text>";
+
+    if (showAttrs && node.attrs) {
+      const names = Object.keys(node.attrs);
+      out += names.map((name, i) =>
+        '<text x="' + node.px + '" y="' + (node.py + 24 + i * 13) + '" text-anchor="middle" font-size="10.5" fill="#65748a">' +
+        esc(name + " = " + node.attrs[name]) + "</text>"
+      ).join("");
+    }
+    return out;
+  }).join("");
+
+  return '<svg width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + " " + height + '">' +
+         edges + boxes + "</svg>";
+}
+
+/* ----------------------- grafo de dependencias en SVG ------------------ */
+function graphSVG(graph) {
+  const rowH = 62;
+  const padX = 18;
+  const gap = 16;
+
+  const byLevel = new Map();
+  graph.nodes.forEach((node) => {
+    const label = node.value === null || node.value === undefined
+      ? node.id
+      : node.id + " = " + node.value;
+    const width = label.length * 6.6 + 18;
+    const entry = { id: node.id, label, width, unresolved: node.unresolved, level: node.level };
+    if (!byLevel.has(node.level)) byLevel.set(node.level, []);
+    byLevel.get(node.level).push(entry);
+  });
+
+  // Ancho total: el nivel mas lleno manda.
+  let widest = 320;
+  byLevel.forEach((entries) => {
+    const total = entries.reduce((sum, e) => sum + e.width, 0) + gap * (entries.length - 1);
+    widest = Math.max(widest, total + padX * 2);
+  });
+
+  const placed = new Map();
+  byLevel.forEach((entries, level) => {
+    const total = entries.reduce((sum, e) => sum + e.width, 0) + gap * (entries.length - 1);
+    let x = (widest - total) / 2;
+    entries.forEach((entry) => {
+      entry.x = x + entry.width / 2;
+      entry.y = level * rowH + 26;
+      x += entry.width + gap;
+      placed.set(entry.id, entry);
+    });
+  });
+
+  const levels = Math.max(...graph.nodes.map((n) => n.level)) + 1;
+  const height = levels * rowH + 16;
+
+  const edges = graph.edges.map((edge) => {
+    const from = placed.get(edge.from);
+    const to = placed.get(edge.to);
+    if (!from || !to) return "";
+    return '<line x1="' + from.x + '" y1="' + (from.y + 11) + '" x2="' + to.x + '" y2="' + (to.y - 14) +
+           '" stroke="#a9b5cc" stroke-width="1.2" marker-end="url(#arrow)"/>';
+  }).join("");
+
+  const boxes = [];
+  placed.forEach((entry) => {
+    const fill = entry.unresolved ? "#fdeceb" : "#fbfcfe";
+    const stroke = entry.unresolved ? "#b3261e" : "#c5cfe0";
+    const ink = entry.unresolved ? "#b3261e" : "#16202e";
+    boxes.push(
+      '<rect x="' + (entry.x - entry.width / 2) + '" y="' + (entry.y - 11) + '" width="' + entry.width +
+      '" height="22" rx="6" fill="' + fill + '" stroke="' + stroke + '"/>' +
+      '<text x="' + entry.x + '" y="' + (entry.y + 4) + '" text-anchor="middle" font-size="11" fill="' +
+      ink + '">' + esc(entry.label) + "</text>"
+    );
+  });
+
+  return '<svg width="' + widest + '" height="' + height + '" viewBox="0 0 ' + widest + " " + height + '">' +
+    '<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">' +
+    '<path d="M 0 0 L 10 5 L 0 10 z" fill="#a9b5cc"/></marker></defs>' +
+    edges + boxes.join("") + "</svg>";
+}
+
+/* --------------------------- cadenas: la vista ------------------------- */
+function traceTable(result, parser) {
+  const rows = result.trace;
+  if (!rows.length) return "";
+
+  const header = parser === "ll1"
+    ? "<tr><th>Pila</th><th>Entrada</th><th>Accion</th></tr>"
+    : "<tr><th>Pila de estados</th><th>Simbolos</th><th>Entrada</th><th>Accion</th></tr>";
+
+  const body = rows.map((row) => {
+    const style = row.kind === "error" ? " style='color:#b3261e;font-weight:600'" : "";
+    return parser === "ll1"
+      ? "<tr><td class='mono'>" + esc(row.stack) + "</td><td class='mono'>" + esc(row.input) +
+        "</td><td class='mono'" + style + ">" + esc(row.action) + "</td></tr>"
+      : "<tr><td class='mono'>" + esc(row.stack) + "</td><td class='mono'>" + esc(row.symbols) +
+        "</td><td class='mono'>" + esc(row.input) + "</td><td class='mono'" + style + ">" +
+        esc(row.action) + "</td></tr>";
+  }).join("");
+
+  return "<details><summary>Analisis paso a paso (" + rows.length + " pasos)</summary>" +
+         "<div class='inner scroll'><table>" + header + body + "</table></div></details>";
+}
+
+function renderStrings(data) {
+  const label = data.parser === "ll1" ? "parser LL(1)" : "parser SLR(1)";
+  const parts = ['<div class="card"><h2>Resultados</h2><p class="hint">Analizadas con el ' +
+                 label + ".</p></div>"];
+
+  data.results.forEach((result) => {
+    parts.push('<div class="result"><header><code>' +
+      esc(result.string === "" ? "e" : result.string) + "</code>" +
+      '<span class="badge ' + result.answer + '">' + result.answer + "</span>" +
+      '<span class="muted">' + (result.accepted ? "la gramatica la genera" : "la gramatica no la genera") +
+      "</span></header>" +
+      traceTable(result, data.parser) +
+      (result.tree ? '<div class="svgbox">' + treeSVG(result.tree, false) + "</div>" : "") +
+      "</div>");
+  });
+
+  if (!data.results.length) parts.push('<p class="empty-note">No se envio ninguna cadena.</p>');
+  $("strings-out").innerHTML = parts.join("");
+}
+
+/* ----------------------------- SDD: la vista --------------------------- */
+function renderSddDefinition(data) {
+  $("sdd-grammar").textContent = data.grammarText.trim();
+
+  const sdd = data.sdd;
+  $("sdd-def").innerHTML =
+    '<div class="card"><h2>SDD: ' + esc(sdd.name) + "</h2>" +
+    '<p class="hint">Atributo principal <code>' + esc(sdd.main) + "</code>. Guardada como datos en <code>sdd.py</code>; el evaluador no sabe nada de ella.</p>" +
+    "<details><summary>Tabla de atributos</summary><div class='inner scroll'><table>" +
+    "<tr><th>Simbolo</th><th>Atributo</th><th>Tipo</th><th>Dato</th><th>Significado</th></tr>" +
+    sdd.attributes.map((a) =>
+      "<tr><td class='mono'>" + esc(a.symbol) + "</td><td class='mono'>" + esc(a.attribute) +
+      "</td><td>" + esc(a.kind) + "</td><td>" + esc(a.type) + "</td><td>" + esc(a.meaning) + "</td></tr>"
+    ).join("") + "</table></div></details>" +
+    "<details><summary>Reglas semanticas</summary><div class='inner scroll'><table>" +
+    "<tr><th>Produccion</th><th>Reglas</th></tr>" +
+    sdd.rules.map((r) =>
+      "<tr><td class='mono'>" + esc(r.production) + "</td><td class='mono'>" +
+      r.rules.map(esc).join(";&nbsp; ") + "</td></tr>"
+    ).join("") + "</table></div></details></div>";
+}
+
+function renderSdd(data) {
+  renderSddDefinition(data);
+
+  const parts = [];
+  if (data.circular) {
+    parts.push('<div class="verdict neither">SDD circular activada<small>Es la version del Paso 6: una regla de R -&gt; DR se cambio para que el grafo tenga un ciclo.</small></div>');
+  }
+
+  data.results.forEach((result) => {
+    const head = '<div class="result"><header><code>' + esc(result.string) + "</code>" +
+      '<span class="badge ' + result.answer + '">' + result.answer + "</span>";
+
+    if (!result.accepted) {
+      parts.push(head + '<span class="muted">no pertenece al lenguaje</span></header>' +
+                 traceTable(result, data.parser) + "</div>");
+      return;
+    }
+
+    if (result.error) {
+      parts.push(head + "</header><div class='err'>" + esc(result.error) + "</div></div>");
+      return;
+    }
+
+    if (result.circular) {
+      parts.push(head + '<span class="badge no">SDD circular</span></header>' +
+        "<p class='muted'>El grafo de dependencias tiene un ciclo, asi que no hay orden de evaluacion valido. " +
+        "Atributos que quedaron sin evaluar:</p>" +
+        "<div class='order'>" + result.unresolved.map((name) =>
+          "<div style='color:#b3261e'>" + esc(name) + "</div>").join("") + "</div>" +
+        '<div class="svgbox">' + graphSVG(result.graph) + "</div></div>");
+      return;
+    }
+
+    parts.push(head + '<span class="muted">arbol anotado, grafo y orden de evaluacion</span></header>' +
+      '<div class="svgbox">' + treeSVG(result.tree, true) + "</div>" +
+      "<details><summary>Arbol anotado en texto</summary><div class='inner'><pre class='out'>" +
+      esc(result.treeLines.join("\n")) + "</pre></div></details>" +
+      "<details><summary>Grafo de dependencias (" + result.graph.nodes.length + " atributos, " +
+      result.graph.edges.length + " aristas)</summary><div class='inner'>" +
+      "<p class='hint'>Cada arista va del atributo que se usa al atributo que la regla define.</p>" +
+      '<div class="svgbox">' + graphSVG(result.graph) + "</div></div></details>" +
+      "<details open><summary>Orden de evaluacion (orden topologico)</summary><div class='inner'>" +
+      "<div class='order'>" + result.order.map((step) =>
+        "<div><span>" + step.position + ".</span>" + esc(step.name + " = " + step.value) + "</div>"
+      ).join("") + "</div></div></details>" +
+      '<div class="main-value">' + esc(result.main.name + " = " + result.main.value) + "</div>" +
+      traceTable(result, data.parser) +
+      "</div>");
+  });
+
+  if (!data.results.length) parts.push('<p class="empty-note">No se envio ninguna cadena.</p>');
+  $("sdd-out").innerHTML = parts.join("");
+}
+
+/* ------------------------------- acciones ------------------------------ */
+$("analyze").addEventListener("click", () => run("analyze", "grammar-out", async () => {
+  renderGrammar(await send("/api/grammar", { grammar: $("grammar").value }));
+}));
+
+$("run").addEventListener("click", () => run("run", "strings-out", async () => {
+  renderStrings(await send("/api/parse", {
+    grammar: $("grammar").value,
+    strings: $("strings").value,
+    parser: $("parser").value
+  }));
+}));
+
+$("evaluate").addEventListener("click", () => run("evaluate", "sdd-out", async () => {
+  renderSdd(await send("/api/sdd", {
+    strings: $("sdd-strings").value,
+    circular: $("circular").checked
+  }));
+}));
+
+/* ------------------------------- arranque ------------------------------ */
+$("grammar").value = EXAMPLES["2"];
+$("strings").value = EXAMPLE_STRINGS["2"];
+$("sdd-strings").value = "0#b\n102#t\n1011#b\n210201#t\n102";
+
+send("/api/sdd", null, "GET").then(renderSddDefinition).catch((error) => {
+  $("sdd-grammar").textContent = "No se pudo cargar la gramatica: " + error.message;
+});
+</script>
+
+</body>
+</html>
